@@ -53,7 +53,6 @@ def test_esd_recovers_orbit_timing_error(project, pairs, library):
         reference="flat_ref_iw1_vv",
         secondary="flat_sec_iw1_vv",
         output="flat_co",
-        device="host",
     )
     assert proc.returncode == 0, proc.stderr
     esd = description(project, "flat_co_b01_i")["coregistration"]["esd"]
@@ -78,7 +77,6 @@ def test_without_esd_seams_jump(project, pairs, library):
         reference="flat_ref_iw1_vv",
         secondary="flat_sec_iw1_vv",
         output="flat_noesd",
-        device="host",
     )
     assert proc.returncode == 0, proc.stderr
     assert (
@@ -98,7 +96,6 @@ def test_range_refinement(project, pairs, library):
     common = {
         "reference": "range_ref_iw1_vv",
         "secondary": "range_sec_iw1_vv",
-        "device": "host",
     }
     proc = run_module(project, library, "r", output="range_co", **common)
     assert proc.returncode == 0, proc.stderr
@@ -128,7 +125,6 @@ def test_range_refinement_without_error(project, library):
         reference="flat_ref_iw1_vv",
         secondary="flat_sec_iw1_vv",
         output="flat_r",
-        device="host",
     )
     assert proc.returncode == 0, proc.stderr
     refinement = description(project, "flat_r_b01_i")["coregistration"][
@@ -171,7 +167,6 @@ def test_dem(project, pairs, library):
     common = {
         "reference": "hill_ref_iw1_vv",
         "secondary": "hill_sec_iw1_vv",
-        "device": "host",
     }
     proc = run_module(
         project,
@@ -236,7 +231,6 @@ def test_metadata(project, library):
         reference="flat_ref_iw1_vv",
         secondary="flat_sec_iw1_vv",
         output="meta",
-        device="host",
     )
     assert proc.returncode == 0, proc.stderr
     meta = description(project, "meta_b02_q")
@@ -282,7 +276,6 @@ def test_no_overwrite(project, library):
         "reference": "flat_ref_iw1_vv",
         "secondary": "flat_sec_iw1_vv",
         "output": "again",
-        "device": "host",
     }
     assert run_module(project, library, **kwargs).returncode == 0
     proc = run_module(project, library, **kwargs)

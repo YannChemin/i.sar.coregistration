@@ -117,11 +117,13 @@ has no data are null.</p>
 in the compute library <code>libsarcoreg</code>, on an OpenCL device or
 on the host CPU with OpenMP (<strong>device</strong>), the same code
 being compiled for both. OpenCL devices need double precision
-(<code>cl_khr_fp64</code>). <strong>device=auto</strong> tries the
-OpenCL GPUs, then the OpenCL CPU devices, then the host.
-<strong>platform</strong> restricts OpenCL to the platforms whose name
-contains the given text. <strong>nprocs</strong> sets the number of
-OpenMP threads of the host path.</p>
+(<code>cl_khr_fp64</code>). The default, <strong>device=auto</strong>,
+uses OpenCL whenever a device is usable: the OpenCL GPUs first, then the
+OpenCL CPU devices; only without any, it falls back to the host OpenMP
+code, with a warning giving the reason. <strong>platform</strong>
+restricts OpenCL to the platforms whose name contains the given text.
+<strong>nprocs</strong> sets the number of OpenMP threads of the host
+path.</p>
 <h2 id="notes">NOTES</h2>
 <p>The current project must be unprojected (XY), like the
 <em>r.in.s1slc</em> maps. The computational region is not used: every

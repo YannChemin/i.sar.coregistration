@@ -207,8 +207,19 @@ int sarcoreg_init(const char *device, const char *platform, int nthreads,
     }
     if (try_type(CL_DEVICE_TYPE_CPU, plat, msg, msglen) == 0)
         return 0;
-    if (strcmp(device, "auto") == 0)
-        return sarcoreg_init("host", NULL, nthreads, msg, msglen);
+    if (strcmp(device, "auto") == 0) {
+        /* Fall back to OpenMP, keeping why OpenCL was not used. */
+        char reason[1024] = "";
+        size_t n;
+
+        if (msg && msglen > 0)
+            snprintf(reason, sizeof(reason), "%s", msg);
+        sarcoreg_init("host", NULL, nthreads, msg, msglen);
+        n = msg ? strlen(msg) : 0;
+        if (msg && (int)n < msglen)
+            snprintf(msg + n, (size_t)msglen - n, " (no OpenCL: %s)", reason);
+        return 0;
+    }
     state.ready = 0;
     return 1;
 }

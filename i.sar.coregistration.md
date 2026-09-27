@@ -117,8 +117,10 @@ no data are null.
 The per-pixel work (height solution, deramping, interpolation) runs in
 the compute library `libsarcoreg`, on an OpenCL device or on the host
 CPU with OpenMP (**device**), the same code being compiled for both.
-OpenCL devices need double precision (`cl_khr_fp64`). **device=auto**
-tries the OpenCL GPUs, then the OpenCL CPU devices, then the host.
+OpenCL devices need double precision (`cl_khr_fp64`). The default,
+**device=auto**, uses OpenCL whenever a device is usable: the OpenCL
+GPUs first, then the OpenCL CPU devices; only without any, it falls
+back to the host OpenMP code, with a warning giving the reason.
 **platform** restricts OpenCL to the platforms whose name contains the
 given text. **nprocs** sets the number of OpenMP threads of the host
 path.

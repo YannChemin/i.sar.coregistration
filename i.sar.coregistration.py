@@ -788,7 +788,12 @@ class Engine:
                 )
             )
         self.device = self.msg.value.decode()
-        gs.verbose(_("Processing on {}").format(self.device))
+        if device == "auto" and "no OpenCL" in self.device:
+            gs.warning(
+                _("No usable OpenCL device, falling back to OpenMP: {}").format(
+                    self.device
+                )
+            )
 
     def run(self, job):
         if self.lib.sarcoreg_run(ctypes.byref(job), self.msg, 8192):

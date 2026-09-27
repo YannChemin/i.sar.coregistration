@@ -254,6 +254,15 @@ def irf(d, bandwidth):
     return np.sinc(bandwidth * d) * window
 
 
+def bowl(lat, lon, depth=0.0):
+    """Vertical ground motion (m, positive up) between the acquisitions: a
+    Gaussian subsidence bowl of the given depth near the scene centre."""
+    if depth == 0.0:
+        return np.zeros(np.broadcast(lat, lon).shape)
+    d2 = ((lat - CENTRE[0] - 0.001) / 0.004) ** 2 + ((lon - CENTRE[1]) / 0.003) ** 2
+    return -depth * np.exp(-0.5 * d2)
+
+
 def scene(acq, terrain_height=0.0, density=4.0, seed=1):
     """Random scatterers covering the image of acq, with their amplitudes."""
     rng = np.random.default_rng(seed)
@@ -275,7 +284,7 @@ def scene(acq, terrain_height=0.0, density=4.0, seed=1):
     slon = rng.uniform(lon.min(), lon.max(), n)
     sh = hill(slat, slon, terrain_height)
     amplitudes = (rng.normal(size=n) + 1j * rng.normal(size=n)) * 30.0
-    return geodetic_to_ecef(slat, slon, sh), amplitudes
+    return (slat, slon, sh), amplitudes
 
 
 def annotation_xml(acq, stem_swath="IW1"):
@@ -516,9 +525,11 @@ class Pair:
         terrain_height=0.0,
         orbit_time_error=0.0,
         range_time_error=0.0,
+        subsidence=0.0,
         seed=1,
     ):
         self.terrain_height = terrain_height
+        self.subsidence = subsidence
         self.ref = Acquisition(T0, TrueOrbit())
         self.sec = Acquisition(
             T0 + timedelta(days=12),
@@ -528,12 +539,19 @@ class Pair:
             range_time_error=range_time_error,
             absolute_orbit=46927,
         )
-        points, amplitudes = scene(self.ref, terrain_height, seed=seed)
+        (lat, lon, h), amplitudes = scene(self.ref, terrain_height, seed=seed)
+        points = geodetic_to_ecef(lat, lon, h)
+        # The ground moves vertically between the acquisitions.
+        moved = geodetic_to_ecef(lat, lon, h + bowl(lat, lon, subsidence))
         self.ref_bursts = self.ref.image(points, amplitudes)
-        self.sec_bursts = self.sec.image(points, amplitudes)
+        self.sec_bursts = self.sec.image(moved, amplitudes)
         parent = Path(parent)
         self.ref_safe = write_safe(parent / "ref", self.ref, self.ref_bursts)
         self.sec_safe = write_safe(parent / "sec", self.sec, self.sec_bursts)
+
+    def motion(self, lat, lon):
+        """True vertical motion (m, positive up)."""
+        return bowl(lat, lon, self.subsidence)
 
     def terrain(self, lat, lon):
         return hill(lat, lon, self.terrain_height)
