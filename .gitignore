@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# Build
+OBJ.*/
+*.so
+*.tmp.html
+*.tmp.md
+
+# Editors and OS
+*~
+*.swp
+.vscode/
+.idea/
+.DS_Store

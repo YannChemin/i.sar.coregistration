@@ -1,0 +1,170 @@
+<h2 id="description">DESCRIPTION</h2>
+<p><em>i.sar.coregistration</em> resamples a <strong>secondary</strong>
+Sentinel-1 TOPS (IW, EW) Single Look Complex image onto the geometry of
+a <strong>reference</strong> image of the same sub-swath and relative
+orbit, so that the two can be combined pixel by pixel, e.g. by
+<em>i.sar.interferometry</em>. Both images are complex maps imported by
+<em>r.in.s1slc</em> (<code>measure=complex</code>), with their
+metadata.</p>
+<p>The processing follows ESA SNAP (microwave toolbox)
+<em>Back-Geocoding</em> and <em>Enhanced Spectral Diversity</em>:</p>
+<ul>
+<li><strong>Geometric coregistration</strong>: every reference pixel is
+located on the ground from the reference orbit (zero-Doppler time, slant
+range and terrain height), and the ground point is projected into the
+secondary image with the secondary orbit. Orbit state vectors are
+interpolated with Lagrange polynomials over eight vectors. The terrain
+height comes from the <strong>dem</strong> or, without it, from the
+heights of the annotation geolocation grid. The positions are computed
+on a grid of nodes (every 10 lines and 100 samples) for two heights
+enclosing the DEM range and interpolated to every pixel, where the
+height is solved from the DEM.</li>
+<li><strong>TOPS deramping</strong>: the azimuth spectrum of a TOPS
+burst drifts along the burst (antenna steering). Before interpolation,
+the secondary signal is deramped and demodulated with the burst Doppler
+rate, reference time and Doppler centroid computed from the annotated
+azimuth FM rate, Doppler centroid polynomials and steering rate; after
+interpolation the ramp is restored at the interpolated position.</li>
+<li><strong>Interpolation</strong>: a Hann-windowed sinc over 6, 8 or 16
+samples, or bicubic or bilinear interpolation
+(<strong>interpolation</strong>). Taps on null samples are skipped and
+the weights renormalized; a pixel whose nearest secondary sample is null
+is null.</li>
+<li><strong>Enhanced spectral diversity</strong> (ESD): with burst maps
+(see below), the residual azimuth misregistration is estimated in the
+overlaps of consecutive bursts, where each ground point is seen twice
+under looks whose Doppler frequencies differ by about kt × burst cycle
+time. The phase of the double difference interferogram (m<sub>k</sub>
+s<sub>k</sub><sup>*</sup>) (m<sub>k+1</sub>
+s<sub>k+1</sub><sup>*</sup>)<sup>*</sup> is -2π Δf Δt<sub>az</sub> ε for
+a misregistration of ε lines. The phases are averaged with inverse
+quadratic weights γ²/(1-γ²) of the local phase consistency γ of the
+double difference (pixels with γ below <strong>esd_coherence</strong>
+are ignored), and the shift is added to the secondary positions before
+the final interpolation. Azimuth coregistration better than 0.01 line is
+needed to avoid phase jumps at the burst seams of TOPS interferograms,
+and orbits alone rarely give it.</li>
+<li><strong>Range refinement</strong> (<strong>-r</strong> flag):
+residual range misregistration, e.g. from a slant range timing error, is
+estimated as in SNAP <em>Spectral Diversity</em>. Each burst is first
+coregistered in a window (<strong>xcorr_window</strong>, 512 × 512 by
+default, clipped to the valid area) at its centre; the de-meaned
+amplitudes of the reference and coregistered secondary windows are
+cross-correlated (normalized correlation over shifts of up to 8 samples,
+peak refined by FFT oversampling of the correlation by 128). The complex
+signals are oversampled by 2 in range before detection, which removes
+the bias of the amplitude correlation of speckle towards whole samples.
+Bursts whose correlation peak is below <strong>xcorr_threshold</strong>
+or whose shift exceeds one sample are discarded; the mean range shift of
+the others is added to all the secondary range positions, before ESD and
+the final interpolation. It also works on debursted images (one window
+per burst segment).</li>
+</ul>
+<h3 id="input-images">Input images</h3>
+<p>The <strong>reference</strong> and <strong>secondary</strong> options
+are basenames of images imported by <em>r.in.s1slc</em>, i.e.
+<code>{output}_{swath}_{pol}</code>:</p>
+<ul>
+<li>burst maps <code>{basename}_bNN_i</code> and <code>_q</code>,
+imported with the <strong>-b</strong> flag of <em>r.in.s1slc</em>: each
+burst is complete, including the lines it shares with its neighbours,
+which ESD needs. This is the recommended input. Reference and secondary
+bursts are paired by geometry (and their burst IDs are checked when both
+products have them); reference bursts that no secondary burst covers are
+skipped with a warning.</li>
+<li>debursted maps <code>{basename}_i</code> and <code>_q</code>: the
+coregistration uses the orbits only (no ESD). Around each burst seam,
+the rows between the reference and secondary seams hold data of
+different bursts in the two images, i.e. of different parts of the
+azimuth spectrum, and are poorly coherent.</li>
+</ul>
+<p>Both images must be of the same kind. The module fails if a basename
+matches both kinds of maps.</p>
+<h3 id="output">Output</h3>
+<p>The coregistered secondary maps have the geometry of the reference
+maps and their names, the reference basename being replaced by
+<strong>output</strong>: <code>{output}_i</code> and
+<code>{output}_q</code>, or <code>{output}_bNN_i</code> and
+<code>{output}_bNN_q</code> for each reference burst. They are FCELL
+maps (null where the secondary image has no data) with the units,
+calibration, semantic label and timestamp of the secondary image.</p>
+<p>The <strong>extra</strong> option adds maps in reference geometry:
+the azimuth and range offsets (secondary minus reference position, in
+lines of the secondary burst and in samples) and the ellipsoidal terrain
+height used (<code>elevation</code>), which
+<em>i.sar.interferometry</em> uses to remove the topographic phase.</p>
+<p>Each output map carries a
+<code>cell_misc/&lt;map&gt;/description.json</code> file with the
+secondary product and annotation metadata (orbit, Doppler, bursts), the
+reference raster geometry and a <code>coregistration</code> section:
+reference and secondary maps and products, burst pairs, DEM,
+interpolation, the ESD result (shift, and phase, Doppler separation,
+weight and shift of each overlap) and the range refinement result
+(shift, and window, azimuth and range offsets and correlation peak of
+each burst).</p>
+<h3 id="dem">DEM</h3>
+<p>The <strong>dem</strong> is any GDAL raster in any CRS covering the
+scene; it is reprojected to a WGS84 longitude/latitude grid by bilinear
+interpolation. Heights above the EGM96 geoid
+(<strong>dem_height=geoid</strong>, e.g. SRTM, Copernicus DEM) are
+converted to ellipsoidal heights with the PROJ grid
+<code>us_nga_egm96_15.tif</code> or <code>egm96_15.gtx</code>, which
+must be installed (e.g.
+<code>projsync --file us_nga_egm96_15.tif</code>). Pixels where the DEM
+has no data are null.</p>
+<h3 id="processing-device">Processing device</h3>
+<p>The per-pixel work (height solution, deramping, interpolation) runs
+in the compute library <code>libsarcoreg</code>, on an OpenCL device or
+on the host CPU with OpenMP (<strong>device</strong>), the same code
+being compiled for both. OpenCL devices need double precision
+(<code>cl_khr_fp64</code>). <strong>device=auto</strong> tries the
+OpenCL GPUs, then the OpenCL CPU devices, then the host.
+<strong>platform</strong> restricts OpenCL to the platforms whose name
+contains the given text. <strong>nprocs</strong> sets the number of
+OpenMP threads of the host path.</p>
+<h2 id="notes">NOTES</h2>
+<p>The current project must be unprojected (XY), like the
+<em>r.in.s1slc</em> maps. The computational region is not used: every
+map is processed in full.</p>
+<p>The range refinement estimates one constant shift for the whole
+image. It corrects timing errors, not the range offsets of the terrain
+relief: without a DEM over hilly terrain it only absorbs their mean.
+Burst IDs of products before IPF 3.4 are absent; pairing is then
+geometric only.</p>
+<p>The module requires NumPy and the GDAL Python bindings, and a C
+compiler with OpenMP and the OpenCL headers and ICD loader to build
+<code>libsarcoreg</code>.</p>
+<h2 id="examples">EXAMPLES</h2>
+<p>Import two acquisitions burst by burst and coregister the second one
+on the first, with the Copernicus DEM:</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="ex">grass</span> <span class="at">-c</span> XY <span class="va">$HOME</span>/grassdata/s1_sharjah <span class="at">-e</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="ex">grass</span> <span class="va">$HOME</span>/grassdata/s1_sharjah/PERMANENT <span class="at">--exec</span> bash</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="ex">r.in.s1slc</span> <span class="at">-b</span> input=S1A_IW_SLC__1SDV_20230112T142507_20230112T142534_046752_059AD8_A55D.zip <span class="dt">\</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    output=s1_20230112 swath=IW2 polarization=VV bbox=55.35,25.25,55.50,25.40</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="ex">r.in.s1slc</span> <span class="at">-b</span> input=S1A_IW_SLC__1SDV_20230124T...zip <span class="dt">\</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    output=s1_20230124 swath=IW2 polarization=VV bbox=55.35,25.25,55.50,25.40</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="ex">i.sar.coregistration</span> <span class="at">-r</span> reference=s1_20230112_iw2_vv secondary=s1_20230124_iw2_vv <span class="dt">\</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    output=s1_20230124_co dem=copernicus_dem_30m.tif extra=elevation</span></code></pre></div>
+<p>The <strong>-r</strong> flag adds the range refinement by
+cross-correlation.</p>
+<p>The ESD shift and the per-overlap estimates are in the metadata:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="ex">python3</span> <span class="at">-m</span> json.tool <span class="va">$(</span><span class="ex">g.gisenv</span> get=GISDBASE<span class="va">)</span>/<span class="va">$(</span><span class="ex">g.gisenv</span> get=LOCATION_NAME<span class="va">)</span>/PERMANENT/cell_misc/s1_20230124_co_b04_i/description.json <span class="kw">|</span> <span class="fu">grep</span> <span class="at">-A3</span> <span class="st">&#39;&quot;esd&quot;&#39;</span></span></code></pre></div>
+<h2 id="references">REFERENCES</h2>
+<ul>
+<li>N. Yagüe-Martínez, P. Prats-Iraola, F. Rodríguez González, R. Brcic,
+R. Shau, D. Geudtner, M. Eineder and R. Bamler, <em>Interferometric
+Processing of Sentinel-1 TOPS Data</em>, IEEE Transactions on Geoscience
+and Remote Sensing, 54(4), 2220-2234, 2016,
+doi:10.1109/TGRS.2015.2497902.</li>
+<li>ESA, <em>Sentinel-1 Product Specification</em>,
+S1-RS-MDA-52-7441.</li>
+<li>ESA SNAP microwave toolbox: <a
+href="https://github.com/senbox-org/microwave-toolbox">https://github.com/senbox-org/microwave-toolbox</a></li>
+</ul>
+<h2 id="see-also">SEE ALSO</h2>
+<p><em><a href="i.sar.interferometry.html">i.sar.interferometry</a>, <a
+href="r.in.s1slc.html">r.in.s1slc</a></em></p>
+<h2 id="authors">AUTHORS</h2>
+<p>Yann Chemin</p>
